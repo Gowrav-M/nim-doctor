@@ -8,7 +8,7 @@
     ".": "./dist/cli.js"
   },
   "bin": {
-    "nim-doctor": "./dist/cli.js"
+    "nim-doctor": "dist/cli.js"
   },
   "files": [
     "dist",
