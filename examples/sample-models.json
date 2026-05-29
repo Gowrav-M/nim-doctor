@@ -1,0 +1,47 @@
+[
+  {
+    "id": "qwen/qwen3-coder-480b-a35b-instruct",
+    "object": "model",
+    "ownedBy": "qwen",
+    "category": "coding",
+    "provider": "qwen",
+    "capabilities": ["chat", "streaming", "tool-calling", "coding"],
+    "source": "fixture"
+  },
+  {
+    "id": "nvidia/llama-3.1-nemotron-nano-8b-v1",
+    "object": "model",
+    "ownedBy": "nvidia",
+    "category": "reasoning",
+    "provider": "nvidia",
+    "capabilities": ["chat", "streaming", "tool-calling", "reasoning"],
+    "source": "fixture"
+  },
+  {
+    "id": "nvidia/nv-embedcode-7b-v1",
+    "object": "model",
+    "ownedBy": "nvidia",
+    "category": "retrieval",
+    "provider": "nvidia",
+    "capabilities": ["embeddings"],
+    "source": "fixture"
+  },
+  {
+    "id": "meta/llama-guard-4-12b",
+    "object": "model",
+    "ownedBy": "meta",
+    "category": "safety",
+    "provider": "meta",
+    "capabilities": ["chat", "streaming", "tool-calling", "safety"],
+    "source": "fixture"
+  },
+  {
+    "id": "microsoft/phi-4-multimodal-instruct",
+    "object": "model",
+    "ownedBy": "microsoft",
+    "category": "vision",
+    "provider": "microsoft",
+    "capabilities": ["chat", "streaming", "tool-calling", "vision"],
+    "source": "fixture"
+  }
+]
