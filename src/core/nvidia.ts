@@ -19,6 +19,7 @@ export interface TestModelOptions {
   model: string;
   stream?: boolean | undefined;
   tools?: boolean | undefined;
+  jsonMode?: boolean | undefined;
 }
 
 export class NvidiaApiError extends Error {
@@ -74,8 +75,8 @@ export class NvidiaClient {
         body: JSON.stringify(buildChatRequest(options))
       });
       const latencyMs = Math.round(performance.now() - started);
+      const text = await safeText(response);
       if (!response.ok) {
-        const text = await safeText(response);
         return ModelTestResultSchema.parse({
           model: options.model,
           baseUrl: this.baseUrl,
@@ -88,19 +89,18 @@ export class NvidiaClient {
           error: redactSecrets(text.slice(0, 500))
         });
       }
-      const responsePreview = options.stream === true
-        ? redactSecrets((await safeText(response)).slice(0, 300))
-        : redactSecrets(JSON.stringify(await parseJsonResponse(response)).slice(0, 300));
+      const validation = validateResponseShape(options, text, response.headers.get("content-type") ?? "");
       return ModelTestResultSchema.parse({
         model: options.model,
         baseUrl: this.baseUrl,
         testedAt,
-        ok: true,
+        ok: validation.ok,
         latencyMs,
         statusCode: response.status,
-        streaming: options.stream === true ? "pass" : undefined,
-        toolCalling: options.tools === true ? "pass" : undefined,
-        responsePreview
+        streaming: options.stream === true ? validation.status : undefined,
+        toolCalling: options.tools === true ? validation.status : undefined,
+        error: validation.ok ? undefined : validation.message,
+        responsePreview: redactSecrets(text.slice(0, 300))
       });
     } catch (error) {
       const latencyMs = Math.round(performance.now() - started);
@@ -140,7 +140,7 @@ function buildChatRequest(options: TestModelOptions): Record<string, unknown> {
     messages: [
       {
         role: "user",
-        content: "Reply with exactly: OK"
+        content: options.jsonMode === true ? "Return {\"ok\":true} as JSON." : "Reply with exactly: OK"
       }
     ],
     temperature: 0,
@@ -165,7 +165,13 @@ function buildChatRequest(options: TestModelOptions): Record<string, unknown> {
         }
       }
     ];
-    request["tool_choice"] = "auto";
+    request["tool_choice"] = {
+      type: "function",
+      function: { name: "nim_doctor_ping" }
+    };
+  }
+  if (options.jsonMode === true) {
+    request["response_format"] = { type: "json_object" };
   }
   return request;
 }
@@ -244,4 +250,84 @@ export function inferCapabilities(modelId: string): NimCapability[] {
     capabilities.add("tool-calling");
   }
   return [...capabilities];
+}
+
+function validateResponseShape(
+  options: TestModelOptions,
+  text: string,
+  contentType: string
+): { ok: boolean; status: "pass" | "fail"; message?: string | undefined } {
+  if (options.stream === true) {
+    const looksLikeSse = contentType.includes("text/event-stream") || text.includes("data:");
+    if (!looksLikeSse) {
+      return {
+        ok: false,
+        status: "fail",
+        message: "stream=true did not return recognizable SSE data."
+      };
+    }
+    if (options.tools === true && !text.includes("tool_calls") && !text.includes("function_call")) {
+      return {
+        ok: false,
+        status: "fail",
+        message: "streaming tool request did not return recognizable tool-call deltas."
+      };
+    }
+    return { ok: true, status: "pass" };
+  }
+
+  const parsed = parseJson(text);
+  if (options.tools === true && !hasPath(parsed, ["choices", 0, "message", "tool_calls"])) {
+    return {
+      ok: false,
+      status: "fail",
+      message: "tools request succeeded but response did not include message.tool_calls."
+    };
+  }
+  if (options.jsonMode === true) {
+    const content = readPath(parsed, ["choices", 0, "message", "content"]);
+    if (typeof content !== "string") {
+      return {
+        ok: false,
+        status: "fail",
+        message: "JSON mode response did not include message.content."
+      };
+    }
+    try {
+      JSON.parse(content);
+    } catch {
+      return {
+        ok: false,
+        status: "fail",
+        message: "JSON mode response content was not parseable JSON."
+      };
+    }
+  }
+  return { ok: true, status: "pass" };
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasPath(value: unknown, path: Array<string | number>): boolean {
+  return readPath(value, path) !== undefined;
+}
+
+function readPath(value: unknown, path: Array<string | number>): unknown {
+  let current: unknown = value;
+  for (const key of path) {
+    if (typeof key === "number") {
+      if (!Array.isArray(current)) return undefined;
+      current = current[key];
+    } else {
+      if (current === null || typeof current !== "object") return undefined;
+      current = (current as Record<string, unknown>)[key];
+    }
+  }
+  return current;
 }

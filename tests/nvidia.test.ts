@@ -37,4 +37,32 @@ describe("nvidia helpers", () => {
     expect(result.ok).toBe(false);
     expect(result.error).not.toContain("nvapi-secret");
   });
+
+  it("requires actual tool_calls for tool compatibility", async () => {
+    const fetchFn = async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          tool_calls: [{
+            id: "call_1",
+            type: "function",
+            function: { name: "nim_doctor_ping", arguments: "{\"ok\":true}" }
+          }]
+        }
+      }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    const client = new NvidiaClient({ apiKey: "nvapi-test", fetchFn });
+    const result = await client.testModel({ model: "qwen/test", tools: true });
+    expect(result.ok).toBe(true);
+    expect(result.toolCalling).toBe("pass");
+  });
+
+  it("fails tool compatibility when tool_calls are missing", async () => {
+    const fetchFn = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "I would call a tool." } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    const client = new NvidiaClient({ apiKey: "nvapi-test", fetchFn });
+    const result = await client.testModel({ model: "qwen/test", tools: true });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("tool_calls");
+  });
 });

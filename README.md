@@ -38,6 +38,9 @@ npx nim-doctor discover
 # Live endpoint check
 npx nim-doctor test qwen/qwen3-coder-480b-a35b-instruct --stream --tools
 
+# Full NIM agent-readiness matrix
+npx nim-doctor compat qwen/qwen3-coder-480b-a35b-instruct
+
 # Generate a Continue config template
 npx nim-doctor init continue
 
@@ -63,6 +66,7 @@ npx nim-doctor test qwen/qwen3-coder-480b-a35b-instruct
 | `doctor` | Checks Node version, API key presence, base URL shape, and output folder permissions |
 | `discover` | Lists live NVIDIA NIM models, or bundled offline fixtures without a key |
 | `test <model>` | Runs a live chat completion health check |
+| `compat <model>` | Tests chat, streaming, tools, streaming tools, and JSON mode for agent readiness |
 | `check <tool>` | Scans local config files for known NIM integration mistakes |
 | `init <tool>` | Writes reviewable config templates under `.nim-doctor/generated/` |
 | `report` | Writes JSON, Markdown, and HTML evidence reports |
@@ -88,6 +92,8 @@ LiteLLM is a router/proxy. `nim-doctor` is a diagnostic and setup tool.
 | NVIDIA Build UI | Trying models in the browser | Does not generate local agent-tool configs |
 | Web status pages | Showing model availability | Not local-first, no project report |
 | `nim-doctor` | Local checks, endpoint tests, config templates, evidence reports | Not a production proxy |
+
+Research notes: [docs/research.md](docs/research.md)
 
 ## Safety And Legal Notes
 
@@ -118,6 +124,8 @@ This project does not:
     continue-nim-template.yaml
     litellm-nim-template.yaml
   reports/
+    nim-compatibility-matrix.json
+    nim-compatibility-matrix.md
     nim-doctor-report.json
     nim-doctor-report.md
     nim-doctor-report.html

@@ -16,6 +16,8 @@ export interface NimDoctorPaths {
   reportJson: string;
   reportMarkdown: string;
   reportHtml: string;
+  compatibilityJson: string;
+  compatibilityMarkdown: string;
 }
 
 export function packageRoot(): string {
@@ -41,7 +43,9 @@ export function resolvePaths(cwd = process.cwd()): NimDoctorPaths {
     generatedConfigsJson: join(cacheDir, "generated-configs.json"),
     reportJson: join(reportsDir, "nim-doctor-report.json"),
     reportMarkdown: join(reportsDir, "nim-doctor-report.md"),
-    reportHtml: join(reportsDir, "nim-doctor-report.html")
+    reportHtml: join(reportsDir, "nim-doctor-report.html"),
+    compatibilityJson: join(reportsDir, "nim-compatibility-matrix.json"),
+    compatibilityMarkdown: join(reportsDir, "nim-compatibility-matrix.md")
   };
 }
 

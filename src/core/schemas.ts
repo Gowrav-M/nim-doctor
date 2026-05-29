@@ -78,6 +78,30 @@ export const ModelTestResultSchema = z.object({
 });
 export type ModelTestResult = z.infer<typeof ModelTestResultSchema>;
 
+export const NimCompatibilityCapabilitySchema = z.enum(["chat", "streaming", "tools", "streaming_tools", "json_mode"]);
+export type NimCompatibilityCapability = z.infer<typeof NimCompatibilityCapabilitySchema>;
+
+export const NimCompatibilityResultSchema = z.object({
+  capability: NimCompatibilityCapabilitySchema,
+  status: DiagnosticStatusSchema,
+  latencyMs: z.number().nonnegative().optional(),
+  message: z.string().min(1),
+  recommendation: z.string().optional()
+});
+export type NimCompatibilityResult = z.infer<typeof NimCompatibilityResultSchema>;
+
+export const NimCompatibilityMatrixSchema = z.object({
+  schemaVersion: z.literal("nim-doctor.compatibility.v1"),
+  generatedAt: z.iso.datetime(),
+  model: z.string().min(1),
+  baseUrl: z.url(),
+  decision: z.enum(["ready", "review", "blocked"]),
+  agentReadinessScore: z.number().min(0).max(100),
+  results: z.array(NimCompatibilityResultSchema),
+  recommendations: z.array(z.string().min(1)).default([])
+});
+export type NimCompatibilityMatrix = z.infer<typeof NimCompatibilityMatrixSchema>;
+
 export const GeneratedConfigSchema = z.object({
   tool: ToolNameSchema,
   path: z.string().min(1),

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { z } from "zod";
 import { generateConfig, defaultModelForTool } from "./config/generators.js";
+import { buildNimCompatibilityMatrix, renderNimCompatibilityMarkdown } from "./core/compatibility.js";
 import { checkToolConfig, runDoctorDiagnostics } from "./core/diagnostics.js";
 import { ensureStateDirs, packageRoot, resolvePaths } from "./core/files.js";
 import { readOptionalJsonFile, writeJsonFile } from "./core/json.js";
@@ -134,6 +135,49 @@ program
     if (result.error !== undefined) console.log(`Error: ${result.error}`);
     console.log(`Saved: ${ctx.paths.testsJson}`);
     if (!result.ok) process.exitCode = 1;
+  });
+
+program
+  .command("compat")
+  .description("Run a NIM agent-compatibility matrix: chat, streaming, tools, streaming tools, and JSON mode.")
+  .argument("<model>", "model ID, for example qwen/qwen3-coder-480b-a35b-instruct")
+  .option("--fail-on-review", "exit non-zero for review or blocked decisions")
+  .action(async (model: string, options: { failOnReview?: boolean }) => {
+    const ctx = await commandContext();
+    await ensureStateDirs(ctx.paths);
+    if (!hasApiKey()) {
+      throw new NvidiaApiError("NVIDIA_API_KEY is required for live compatibility tests. Run nim-doctor demo for offline proof.");
+    }
+    const client = new NvidiaClient({ apiKey: process.env["NVIDIA_API_KEY"], baseUrl: ctx.baseUrl });
+    const [chat, streaming, tools, streamingTools, jsonMode] = await Promise.all([
+      client.testModel({ model }),
+      client.testModel({ model, stream: true }),
+      client.testModel({ model, tools: true }),
+      client.testModel({ model, stream: true, tools: true }),
+      client.testModel({ model, jsonMode: true })
+    ]);
+    const matrix = buildNimCompatibilityMatrix({
+      model,
+      baseUrl: ctx.baseUrl,
+      chat,
+      streaming,
+      tools,
+      streamingTools,
+      jsonMode
+    });
+    const existing = await readOptionalJsonFile(ctx.paths.testsJson, TestsArraySchema) ?? [];
+    await writeJsonFile(ctx.paths.testsJson, [...existing, chat, streaming, tools, streamingTools, jsonMode]);
+    await writeJsonFile(ctx.paths.compatibilityJson, matrix);
+    await writeTextFile(ctx.paths.compatibilityMarkdown, renderNimCompatibilityMarkdown(matrix));
+    printHeader("nim compatibility");
+    console.log(`Decision: ${matrix.decision.toUpperCase()} | Agent readiness: ${matrix.agentReadinessScore}/100`);
+    for (const result of matrix.results) {
+      console.log(`[${result.status.toUpperCase()}] ${result.capability}: ${result.message}`);
+    }
+    console.log(`Matrix: ${ctx.paths.compatibilityMarkdown}`);
+    if (matrix.decision === "blocked" || (options.failOnReview === true && matrix.decision === "review")) {
+      process.exitCode = 1;
+    }
   });
 
 program
