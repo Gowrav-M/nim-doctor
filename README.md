@@ -32,6 +32,21 @@ flowchart LR
   B --> K["Markdown / HTML / JSON evidence"]
 ```
 
+## Agent Trust Suite
+
+```mermaid
+flowchart LR
+  A["agent-endpoint-doctor"] --> F["agent-trust-center"]
+  B["nim-doctor"] --> F
+  C["agent-cognicheck"] --> F
+  D["agent-skillguard"] --> F
+  E["agentops-watchtower"] --> F
+  F --> G["one trust report"]
+  F --> H["CI gate"]
+```
+
+nim-doctor contributes NVIDIA NIM readiness evidence to Agent Trust Center through `npx nim-doctor evidence`.
+
 ## The Problem
 
 Simple API checks are not enough.

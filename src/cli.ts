@@ -21,6 +21,7 @@ import {
   type ModelTestResult,
   type NimModel
 } from "./core/schemas.js";
+import { createNimTrustEvidence, trustEvidencePath } from "./core/trustEvidence.js";
 import { buildReport, renderHtml, renderMarkdown } from "./report/render.js";
 
 const FALLBACK_VERSION = "0.1.0";
@@ -233,6 +234,20 @@ program
     console.log(`JSON: ${report.json}`);
     console.log(`Markdown: ${report.markdown}`);
     console.log(`HTML: ${report.html}`);
+  });
+
+program
+  .command("evidence")
+  .description("Write normalized Agent Trust Center evidence from the latest nim-doctor reports.")
+  .action(async () => {
+    const ctx = await commandContext();
+    await ensureStateDirs(ctx.paths);
+    const evidence = await createNimTrustEvidence({ paths: ctx.paths, version: ctx.version });
+    const outputPath = trustEvidencePath(ctx.paths);
+    await writeJsonFile(outputPath, evidence);
+    printHeader("trust evidence");
+    console.log(`Decision: ${evidence.decision.toUpperCase()}`);
+    console.log(`Trust evidence: ${outputPath}`);
   });
 
 program.showHelpAfterError();
