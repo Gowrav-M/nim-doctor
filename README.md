@@ -2,26 +2,64 @@
 
 > Unofficial local-first diagnostic CLI for NVIDIA NIM developer workflows.
 
-NVIDIA NIM gives developers OpenAI-compatible model endpoints, but real setup often fails in boring ways: wrong base URLs, missing API keys, model IDs that do not work in a specific tool, fragile streaming, tool-calling mismatch, and hand-written configs for Cursor, Continue, LiteLLM, CrewAI, LlamaIndex, and OpenCode.
+[![CI](https://github.com/Gowrav-M/nim-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/Gowrav-M/nim-doctor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](package.json)
 
-`nim-doctor` is the `brew doctor` style check for that workflow.
+NVIDIA NIM gives developers OpenAI-compatible model endpoints. The hard part is knowing whether a specific model actually works inside Cursor, Continue, LiteLLM, CrewAI, LlamaIndex, OpenCode, and other agent tools.
+
+`nim-doctor` is the local preflight check before you trust NVIDIA NIM inside an agent workflow.
 
 ```bash
 npx nim-doctor demo
 ```
 
-The demo is offline. It generates local evidence in `.nim-doctor/` without needing an API key.
+The demo is offline. It writes local reports without needing an API key.
 
-## What It Solves
+## Visual Map
 
-- Checks whether your machine is ready to call NVIDIA NIM.
-- Uses your own `NVIDIA_API_KEY`; keys are not printed or stored.
-- Discovers models through the OpenAI-compatible `/v1/models` endpoint when a key is available.
-- Tests a model with `/v1/chat/completions`.
-- Optionally checks streaming and tool-calling request compatibility.
-- Scans local tool configs for common mistakes like `/chat/completions` inside the base URL.
-- Generates reviewable config templates for Cursor, Continue, LiteLLM, CrewAI, LlamaIndex, and OpenCode.
-- Writes Markdown, HTML, and JSON reports for sharing with a team.
+```mermaid
+flowchart LR
+  A["Developer machine"] --> B["nim-doctor"]
+  B --> C["NVIDIA NIM /v1 endpoint"]
+  B --> D["Cursor / Continue / LiteLLM configs"]
+  B --> E["Agent-readiness tests"]
+  E --> F["chat"]
+  E --> G["streaming"]
+  E --> H["tool_calls"]
+  E --> I["streaming tool calls"]
+  E --> J["JSON mode"]
+  B --> K["Markdown / HTML / JSON evidence"]
+```
+
+## The Problem
+
+Simple API checks are not enough.
+
+| Looks fine | What can still break |
+| --- | --- |
+| API key exists | key is pasted into config or wrong env var is used |
+| `/v1/models` works | selected model fails in `/chat/completions` |
+| chat returns text | streaming hangs in an IDE |
+| tool schema is accepted | response does not contain `message.tool_calls` |
+| JSON mode is accepted | returned content is not parseable JSON |
+| web UI works | local Cursor/Continue config is wrong |
+
+## What nim-doctor Does
+
+```mermaid
+flowchart TD
+  A["doctor"] --> A1["Node 22 check"]
+  A --> A2["NVIDIA_API_KEY presence"]
+  A --> A3["base URL shape"]
+  A --> A4["writable .nim-doctor folder"]
+
+  B["discover"] --> B1["GET /v1/models"]
+  C["test"] --> C1["single model health check"]
+  D["compat"] --> D1["agent-readiness matrix"]
+  E["init"] --> E1["safe config templates"]
+  F["report"] --> F1["shareable evidence"]
+```
 
 ## Quick Start
 
@@ -29,33 +67,64 @@ The demo is offline. It generates local evidence in `.nim-doctor/` without needi
 # Offline proof, no key needed
 npx nim-doctor demo
 
-# Local machine checks
+# Local setup checks
 npx nim-doctor doctor
 
 # Live model discovery, requires NVIDIA_API_KEY
 npx nim-doctor discover
 
-# Live endpoint check
+# Single model probe
 npx nim-doctor test qwen/qwen3-coder-480b-a35b-instruct --stream --tools
 
-# Full NIM agent-readiness matrix
+# Full agent-readiness matrix
 npx nim-doctor compat qwen/qwen3-coder-480b-a35b-instruct
 
-# Generate a Continue config template
+# Generate reviewable tool config
 npx nim-doctor init continue
 
-# Scan an existing Cursor/Continue/LiteLLM style config
+# Scan existing config
 npx nim-doctor check cursor
 
-# Render local evidence
+# Render evidence reports
 npx nim-doctor report
 ```
 
-On PowerShell:
+PowerShell:
 
 ```powershell
 $env:NVIDIA_API_KEY="nvapi-..."
-npx nim-doctor test qwen/qwen3-coder-480b-a35b-instruct
+cmd /c npx -y nim-doctor compat qwen/qwen3-coder-480b-a35b-instruct
+```
+
+## Agent-Readiness Matrix
+
+`nim-doctor compat <model>` checks the paths that matter for coding agents.
+
+```text
+nim compatibility
+-----------------
+Decision: REVIEW | Agent readiness: 80/100
+[PASS] chat: Capability returned the expected agent-compatible response shape.
+[PASS] streaming: Capability returned the expected agent-compatible response shape.
+[PASS] tools: Capability returned the expected agent-compatible response shape.
+[FAIL] streaming_tools: streaming tool request did not return recognizable tool-call deltas.
+[PASS] json_mode: Capability returned the expected agent-compatible response shape.
+```
+
+## Architecture
+
+```mermaid
+flowchart TB
+  CLI["src/cli.ts"] --> Diag["core/diagnostics.ts"]
+  CLI --> Client["core/nvidia.ts"]
+  CLI --> Compat["core/compatibility.ts"]
+  CLI --> Configs["config/generators.ts"]
+  CLI --> Reports["report/render.ts"]
+
+  Client --> NIM["NVIDIA NIM OpenAI-compatible API"]
+  Compat --> Matrix["nim-compatibility-matrix.md/json"]
+  Configs --> Templates["Continue / LiteLLM / Cursor templates"]
+  Reports --> Evidence["nim-doctor-report.md/html/json"]
 ```
 
 ## Commands
@@ -64,54 +133,14 @@ npx nim-doctor test qwen/qwen3-coder-480b-a35b-instruct
 | --- | --- |
 | `demo` | Offline proof run with fixture models, generated configs, and reports |
 | `doctor` | Checks Node version, API key presence, base URL shape, and output folder permissions |
-| `discover` | Lists live NVIDIA NIM models, or bundled offline fixtures without a key |
-| `test <model>` | Runs a live chat completion health check |
-| `compat <model>` | Tests chat, streaming, tools, streaming tools, and JSON mode for agent readiness |
-| `check <tool>` | Scans local config files for known NIM integration mistakes |
-| `init <tool>` | Writes reviewable config templates under `.nim-doctor/generated/` |
+| `discover` | Lists live NVIDIA NIM models or bundled offline fixtures |
+| `test <model>` | Runs a focused live model health check |
+| `compat <model>` | Runs the full agent-readiness matrix |
+| `check <tool>` | Scans local config files for known NIM mistakes |
+| `init <tool>` | Writes reviewable config templates |
 | `report` | Writes JSON, Markdown, and HTML evidence reports |
 
-## Example Output
-
-```text
-doctor
-------
-[PASS] Node.js version: Node 22.22.0 is supported.
-[PASS] NVIDIA API key: NVIDIA_API_KEY is set locally. The value is not printed or stored.
-[PASS] NVIDIA base URL: Using base URL https://integrate.api.nvidia.com/v1.
-[PASS] Output folder writable: .nim-doctor output folder is writable.
-```
-
-## Why Not Just Use LiteLLM?
-
-LiteLLM is a router/proxy. `nim-doctor` is a diagnostic and setup tool.
-
-| Tool | Good At | Gap |
-| --- | --- | --- |
-| LiteLLM | Proxying and routing many providers | Does not inspect your local Cursor/Continue setup |
-| NVIDIA Build UI | Trying models in the browser | Does not generate local agent-tool configs |
-| Web status pages | Showing model availability | Not local-first, no project report |
-| `nim-doctor` | Local checks, endpoint tests, config templates, evidence reports | Not a production proxy |
-
-Research notes: [docs/research.md](docs/research.md)
-
-## Safety And Legal Notes
-
-`nim-doctor` is an unofficial community tool. It is not affiliated with, endorsed by, or sponsored by NVIDIA.
-
-Use of NVIDIA APIs, hosted endpoints, downloadable NIMs, model outputs, and production deployments is governed by NVIDIA's own terms. Developer or trial access should be treated as development, testing, and evaluation access unless you have the proper production subscription or license.
-
-This project does not:
-
-- bypass authentication or rate limits
-- scrape NVIDIA services aggressively
-- redistribute NVIDIA models
-- claim official NVIDIA status
-- store your API key in reports
-
-## Local Files
-
-`nim-doctor` writes all artifacts under your current folder:
+## Output Files
 
 ```text
 .nim-doctor/
@@ -130,6 +159,25 @@ This project does not:
     nim-doctor-report.md
     nim-doctor-report.html
 ```
+
+## Why Not Just Use LiteLLM?
+
+| Tool | Good At | Gap |
+| --- | --- | --- |
+| LiteLLM | Proxying and routing providers | Does not inspect local Cursor/Continue setup |
+| NVIDIA Build UI | Trying models in a browser | Does not generate local evidence reports |
+| Web status pages | Showing availability | Not project-local, not config-aware |
+| `nim-doctor` | Diagnostics, config templates, NIM compatibility evidence | Not a production proxy |
+
+Research notes: [docs/research.md](docs/research.md)
+
+## Safety And Legal Notes
+
+`nim-doctor` is an unofficial community tool. It is not affiliated with, endorsed by, or sponsored by NVIDIA.
+
+Developer or trial access should be treated as development, testing, and evaluation access unless you have the proper production subscription or license.
+
+This project does not bypass authentication, bypass rate limits, scrape NVIDIA services aggressively, redistribute NVIDIA models, claim official NVIDIA status, or store your API key in reports.
 
 ## Development
 
